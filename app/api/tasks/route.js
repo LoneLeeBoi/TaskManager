@@ -24,18 +24,32 @@ let tasks = [
       filtered = filtered.filter((t) => t.status === status);
     }
   
+    console.log("GET tasks:", { keyword, status, results: filtered.length });
     return Response.json(filtered);
   }
   
   export async function POST(req) {
-    const body = await req.json();
-    const newTask = {
-      id: Date.now(),
-      title: body.title,
-      description: body.description,
-      status: body.status || "pending",
-    };
-    tasks.push(newTask);
-    return Response.json(newTask, { status: 201 });
+    try {
+      const body = await req.json();
+  
+      if (!body.title || !body.description) {
+        return Response.json({ error: "Title and description are required" }, { status: 400 });
+      }
+  
+      const newTask = {
+        id: Date.now(),
+        title: body.title,
+        description: body.description,
+        status: body.status || "pending",
+      };
+  
+      tasks.push(newTask);
+  
+      console.log("Task created:", newTask);
+      return Response.json(newTask, { status: 201 });
+    } catch (err) {
+      console.error("POST /tasks error:", err);
+      return Response.json({ error: "Invalid request" }, { status: 400 });
+    }
   }
   
