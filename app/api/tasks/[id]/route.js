@@ -1,36 +1,56 @@
-// app/api/tasks/[id]/route.js
+import { db } from "../../../lib/db"; // ✅ adjust path to where you placed your db.js
+
+// ✅ UPDATE a task by ID
 export async function PUT(req, { params }) {
+  try {
     const { id } = params;
     const body = await req.json();
-    const index = tasks.findIndex((t) => t.id == id);
-  
-    if (index === -1) {
-      console.error(`PUT failed: Task with id ${id} not found`);
+    const { title, description, status } = body;
+
+    // Update query
+    const [result] = await db.query(
+      "UPDATE tasks SET title = ?, description = ?, status = ? WHERE id = ?",
+      [title, description, status, id]
+    );
+
+    if (result.affectedRows === 0) {
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
-  
-    tasks[index] = { ...tasks[index], ...body };
-    console.log(`Task ${id} updated:`, tasks[index]);
-    return Response.json(tasks[index]);
+
+    // Return updated task
+    const [rows] = await db.query("SELECT * FROM tasks WHERE id = ?", [id]);
+    return Response.json(rows[0]);
+  } catch (err) {
+    console.error("PUT error:", err);
+    return Response.json({ error: "Failed to update task" }, { status: 500 });
   }
-  
-  export async function DELETE(req, { params }) {
+}
+
+// ✅ DELETE a task by ID
+export async function DELETE(req, { params }) {
+  try {
     const { id } = params;
-    console.log("Delete request params:", params);
-  
-    const index = tasks.findIndex((t) => t.id == id);
-  
-    if (index === -1) {
-      console.error(`DELETE failed: Task with id ${id} not found`);
+
+    // Find the task before deleting (so we can return it)
+    const [rows] = await db.query("SELECT * FROM tasks WHERE id = ?", [id]);
+    if (rows.length === 0) {
       return Response.json({ error: "Task not found" }, { status: 404 });
     }
-  
-    const [removed] = tasks.splice(index, 1);
-    console.log(`Task ${id} deleted:`, removed);
-  
+    const deletedTask = rows[0];
+
+    // Delete query
+    const [result] = await db.query("DELETE FROM tasks WHERE id = ?", [id]);
+
+    if (result.affectedRows === 0) {
+      return Response.json({ error: "Task not found" }, { status: 404 });
+    }
+
     return Response.json({
       message: `Task ${id} deleted successfully`,
-      deleted: removed,
+      deleted: deletedTask,
     });
+  } catch (err) {
+    console.error("DELETE error:", err);
+    return Response.json({ error: "Failed to delete task" }, { status: 500 });
   }
-  
+}

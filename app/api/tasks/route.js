@@ -1,55 +1,61 @@
-// app/api/tasks/route.js
-let tasks = [
-    { id: 1, title: "Learn Next.js", description: "Study the basics", status: "pending" },
-    { id: 2, title: "Build CRUD API", description: "Practice coding", status: "in-progress" },
-  ];
-  
-  export async function GET(req) {
+import { db } from "../../lib/db"; // ✅ adjust if needed
+
+// ✅ GET all tasks (with optional search + filter)
+export async function GET(req) {
+  try {
     const { searchParams } = new URL(req.url);
     const keyword = searchParams.get("q");
     const status = searchParams.get("status");
-  
-    let filtered = tasks;
-  
+
+    let query = "SELECT * FROM tasks WHERE 1=1";
+    const values = [];
+
     if (keyword) {
-      const lower = keyword.toLowerCase();
-      filtered = filtered.filter(
-        (t) =>
-          t.title.toLowerCase().includes(lower) ||
-          t.description.toLowerCase().includes(lower)
+      query += " AND (title LIKE ? OR description LIKE ?)";
+      values.push(`%${keyword}%`, `%${keyword}%`);
+    }
+
+    if (status) {
+      query += " AND status = ?";
+      values.push(status);
+    }
+
+    const [rows] = await db.query(query, values);
+
+    return Response.json(rows);
+  } catch (err) {
+    console.error("GET /tasks error:", err);
+    return Response.json({ error: "Failed to fetch tasks" }, { status: 500 });
+  }
+}
+
+// ✅ CREATE a new task
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { title, description, status } = body;
+
+    if (!title || !description) {
+      return Response.json(
+        { error: "Title and description are required" },
+        { status: 400 }
       );
     }
-  
-    if (status) {
-      filtered = filtered.filter((t) => t.status === status);
-    }
-  
-    console.log("GET tasks:", { keyword, status, results: filtered.length });
-    return Response.json(filtered);
+
+    // Insert into DB
+    const [result] = await db.query(
+      "INSERT INTO tasks (title, description, status) VALUES (?, ?, ?)",
+      [title, description, status || "pending"]
+    );
+
+    // Return created task
+    const [rows] = await db.query("SELECT * FROM tasks WHERE id = ?", [
+      result.insertId,
+    ]);
+
+    return Response.json(rows[0], { status: 201 });
+  } catch (err) {
+    console.error("POST /tasks error:", err);
+    return Response.json({ error: "Failed to create task" }, { status: 500 });
   }
-  
-  export async function POST(req) {
-    try {
-      const body = await req.json();
-  
-      if (!body.title || !body.description) {
-        return Response.json({ error: "Title and description are required" }, { status: 400 });
-      }
-  
-      const newTask = {
-        id: Date.now(),
-        title: body.title,
-        description: body.description,
-        status: body.status || "pending",
-      };
-  
-      tasks.push(newTask);
-  
-      console.log("Task created:", newTask);
-      return Response.json(newTask, { status: 201 });
-    } catch (err) {
-      console.error("POST /tasks error:", err);
-      return Response.json({ error: "Invalid request" }, { status: 400 });
-    }
-  }
-  
+}

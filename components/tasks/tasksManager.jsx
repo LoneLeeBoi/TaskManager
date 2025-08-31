@@ -2,37 +2,57 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit, Trash2, CheckCircle } from "lucide-react"; // ✅ More icons
+import { Plus, Search, Edit, Trash2, CheckCircle } from "lucide-react";
 
 export default function TaskManager() {
-  // ✅ Load tasks immediately from localStorage (lazy init)
-  const [tasks, setTasks] = useState(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("tasks");
-      return saved ? JSON.parse(saved) : [];
-    }
-    return [];
-  });
-
+  const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState({ title: "", description: "", status: "pending" });
   const [editingTask, setEditingTask] = useState(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
 
-  // ✅ Keep tasks synced with localStorage
+  // ✅ Fetch tasks from API on mount
   useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    fetchTasks();
+  }, []);
 
-  const handleSubmit = (e) => {
+  const fetchTasks = async () => {
+    let url = "/api/tasks";
+    const params = [];
+    if (search) params.push(`q=${encodeURIComponent(search)}`);
+    if (filter !== "all") params.push(`status=${filter}`);
+    if (params.length) url += `?${params.join("&")}`;
+
+    const res = await fetch(url);
+    const data = await res.json();
+    setTasks(data);
+  };
+
+  // ✅ Re-fetch tasks when search/filter changes
+  useEffect(() => {
+    fetchTasks();
+  }, [search, filter]);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (editingTask) {
-      setTasks(tasks.map((t) => (t.id === editingTask.id ? { ...t, ...newTask } : t)));
+      // Update task
+      await fetch(`/api/tasks/${editingTask.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTask),
+      });
       setEditingTask(null);
     } else {
-      setTasks([...tasks, { id: Date.now(), ...newTask }]);
+      // Create task
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTask),
+      });
     }
     setNewTask({ title: "", description: "", status: "pending" });
+    fetchTasks();
   };
 
   const handleEdit = (task) => {
@@ -40,37 +60,34 @@ export default function TaskManager() {
     setNewTask(task);
   };
 
-  const handleDelete = (id) => {
-    setTasks(tasks.filter((t) => t.id !== id));
+  const handleDelete = async (id) => {
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    fetchTasks();
   };
 
-  const handleMarkDone = (id) => {
-    setTasks(tasks.map((t) => (t.id === id ? { ...t, status: "completed" } : t)));
+  const handleMarkDone = async (id) => {
+    await fetch(`/api/tasks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "completed" }),
+    });
+    fetchTasks();
   };
-
-  const filteredTasks = tasks.filter((t) => {
-    const matchesSearch =
-      t.title.toLowerCase().includes(search.toLowerCase()) ||
-      t.description.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === "all" ? true : t.status === filter;
-    return matchesSearch && matchesFilter;
-  });
 
   return (
     <div className="max-w-4xl mx-auto mt-10 p-8 bg-gray-100 mb-10 rounded-2xl shadow-xl">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold mb-6 text-gray-800">Task Manager</h1>
+        <h1 className="flex text-3xl font-bold mb-6 text-gray-800">Task Manager</h1>
         <Link
           href="/"
-          className="text-sm font-bold bg-gray-200 p-2 rounded hover:bg-gray-300 hover:text-gray-700"
+          className="text-sm font-bold bg-gray-200 p-2 rounded hover:bg-gray-300 mb-6 hover:text-gray-700"
         >
           Go back home
         </Link>
       </div>
 
-      {/* Search + Filter Section */}
+      {/* Search + Filter */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-        {/* Search with icon */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
           <input
@@ -82,7 +99,6 @@ export default function TaskManager() {
           />
         </div>
 
-        {/* Filter Buttons */}
         <div className="flex gap-2 flex-wrap">
           {["all", "pending", "in-progress", "completed"].map((status) => (
             <button
@@ -94,9 +110,7 @@ export default function TaskManager() {
                   : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"
               }`}
             >
-              <CheckCircle
-                className={`w-4 h-4 ${filter === status ? "opacity-100" : "opacity-40"}`}
-              />
+              <CheckCircle className={`w-4 h-4 ${filter === status ? "opacity-100" : "opacity-40"}`} />
               {status}
             </button>
           ))}
@@ -160,10 +174,10 @@ export default function TaskManager() {
         <div>
           <h1 className="text-2xl font-semibold text-green-400">Active Tasks</h1>
         </div>
-        {filteredTasks.length === 0 ? (
+        {tasks.length === 0 ? (
           <p className="text-gray-500 text-center">No tasks found.</p>
         ) : (
-          filteredTasks.map((task) => (
+          tasks.map((task) => (
             <li
               key={task.id}
               className="flex justify-between items-center p-4 bg-gray-200 rounded-lg shadow-sm hover:shadow-md transition"
